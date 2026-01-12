@@ -1,0 +1,208 @@
+version: "3.9"
+
+volumes:
+  kafka-data:
+    driver: local
+
+networks:
+  demo-ai-bu-net:
+    driver: bridge
+
+services:
+
+  traefik:
+    image:          traefik:v3.0
+    container_name: traefik
+    restart:        unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=demo-ai-bu-net"
+      # entrypoints configuration
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.traefik.address=:8080"
+      # dashboard configuration
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "8080:80"
+      - "8081:8080"
+    # Traefik requires to access Docker engine to inspect 
+    # current status and discover services
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - demo-ai-bu-net
+
+  # agents:
+  #   build:
+  #     context: ../agents
+  #   # container_name: agents
+  #   ports:
+  #     - "8000:8000"
+  #   env_file:
+  #     - ../agents/.env
+
+  kafka:
+    image: confluentinc/cp-kafka:8.0.0
+    hostname:       kafka
+    container_name: kafka
+    restart: unless-stopped
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT, PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS:           PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS:                      PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093, PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME:     PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES:      CONTROLLER
+      KAFKA_PROCESS_ROLES:                  broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS:       1@kafka:29093
+
+      # partitions management
+      KAFKA_NUM_PARTITIONS:             12
+      KAFKA_COMPRESSION_TYPE:           gzip
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR:         1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS:         0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR:            1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      KAFKA_JMX_PORT:     9091
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_JMX_OPTS: >
+        -Dcom.sun.management.jmxremote=true
+        -Dcom.sun.management.jmxremote.rmi.port=9091
+        -Dcom.sun.management.jmxremote.authenticate=false
+        -Dcom.sun.management.jmxremote.ssl=false
+        -Dcom.sun.management.jmxremote.local.only=false
+        -javaagent:/usr/share/java/cp-base-new/
+        jmx_prometheus_javaagent-0.20.0.jar=1234:
+        /opt/prometheus/config.yaml
+
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      CLUSTER_ID:     MkU3OEVBNTcwNTJENDM2Qk
+
+
+  schema-registry:
+    image:          confluentinc/cp-schema-registry:8.0.0
+    hostname:       schema-registry
+    container_name: schema-registry
+    restart: on-failure
+    depends_on:
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8085
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
+
+  connect:
+    image: cnfldemos/kafka-connect-datagen:0.6.7-8.0.0
+    hostname: connect
+    container_name: connect
+    restart: on-failure
+    depends_on:
+      - kafka
+      - schema-registry
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
+      CONNECT_REST_PORT: 8083
+      CONNECT_REST_LISTENERS: http://0.0.0.0:8083
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: kafka-connect
+      CONNECT_CONFIG_STORAGE_TOPIC: __connect-config
+      CONNECT_OFFSET_STORAGE_TOPIC: __connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: __connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8085
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+
+  akhq:
+    image:          tchiotludo/akhq:latest
+    container_name: akhq
+    restart:        unless-stopped
+    depends_on:
+      - kafka
+      - schema-registry
+      - connect
+    environment:
+      MICRONAUT_SERVER_CONTEXT_PATH: /akhq
+      AKHQ_CONFIGURATION: |
+        akhq:
+          server:
+            access-log: true
+          connections:
+            local-cluster:
+              properties:
+                bootstrap.servers: kafka:29092
+              schema-registry:
+                url: http://schema-registry:8085
+              connect:
+                - name: connect
+                  url: http://connect:8083
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.akhq.rule=PathPrefix(`/akhq`)"
+      - "traefik.http.routers.akhq.entrypoints=web"
+      - "traefik.http.routers.akhq.priority=100"
+      - "traefik.http.services.akhq.loadbalancer.server.port=8080"
+    networks:
+      - demo-ai-bu-net
+    healthcheck:
+      disable: true
+
+  prometheus:
+    image:          prom/prometheus:latest
+    container_name: prometheus
+    restart:        on-failure
+    volumes:
+      - ./prometheus:/etc/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.external-url=/prometheus"
+      - "--web.route-prefix=/prometheus"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=PathPrefix(`/prometheus`)"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    networks:
+      - demo-ai-bu-net
+
+  kafka-exporter:
+    image:          danielqsj/kafka-exporter:latest
+    container_name: kafka-exporter
+    restart:        on-failure
+    depends_on:
+      - kafka
+    command:
+      - "--kafka.server=kafka:29092"
+
+  grafana:
+    image:          grafana/grafana:latest
+    container_name: grafana
+    restart:        on-failure
+    depends_on:
+      - prometheus
+    # volumes:
+    #   - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+    #   - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+    #   - ./grafana/dashboards:/etc/grafana/dashboards
+    #   - ./grafana/grafana.ini:/etc/grafana/grafana.ini
+    environment:
+      - GF_SERVER_DOMAIN=localhost
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=PathPrefix(`/grafana`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    networks:
+      - demo-ai-bu-net
