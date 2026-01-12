@@ -1,0 +1,8 @@
+# Lettura dei connettori disponibili
+curl http://localhost:8080/connect/connectors
+
+# Pubblicazione di un connettore con datagen
+curl -X POST http://localhost:8080/connect/connectors -H "Content-Type: application/jsond "{\"name\":\"datagen-users\",\"config\":{\"connector.class\":\"io.confluent.kafka.connect.datagen.DatagenConnector\",\"kafka.topic\":\"users\",\"quickstart\":\"users\",\"max.interval\":1000,\"iterations\":-1,\"tasks.max\":\"1\"}}"
+
+# Verifica dello stato
+curl http://localhost:8080/connect/connectors/datagen-users/status
