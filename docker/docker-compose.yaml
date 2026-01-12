@@ -100,33 +100,6 @@ services:
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8085
       SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
 
-  connect:
-    image: cnfldemos/kafka-connect-datagen:0.6.7-8.0.0
-    hostname: connect
-    container_name: connect
-    restart: on-failure
-    depends_on:
-      - kafka
-      - schema-registry
-    environment:
-      CONNECT_BOOTSTRAP_SERVERS: kafka:29092
-      CONNECT_REST_PORT: 8083
-      CONNECT_REST_LISTENERS: http://0.0.0.0:8083
-      CONNECT_REST_ADVERTISED_HOST_NAME: connect
-      CONNECT_GROUP_ID: kafka-connect
-      CONNECT_CONFIG_STORAGE_TOPIC: __connect-config
-      CONNECT_OFFSET_STORAGE_TOPIC: __connect-offsets
-      CONNECT_STATUS_STORAGE_TOPIC: __connect-status
-      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
-      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
-      CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
-      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8085
-      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
-    networks:
-      - demo-ai-bu-net
-
   akhq:
     image:          tchiotludo/akhq:latest
     container_name: akhq
@@ -179,14 +152,34 @@ services:
     networks:
       - demo-ai-bu-net
 
-  kafka-exporter:
-    image:          danielqsj/kafka-exporter:latest
-    container_name: kafka-exporter
-    restart:        on-failure
-    depends_on:
-      - kafka
-    command:
-      - "--kafka.server=kafka:29092"
+  connect:
+      image: cnfldemos/kafka-connect-datagen:0.6.7-8.0.0
+      hostname: connect
+      container_name: connect
+      depends_on:
+        - kafka
+        - schema-registry
+  #    ports:
+  #      - "8083:8083"
+      environment:
+        CONNECT_BOOTSTRAP_SERVERS: 'kafka:29092'
+        CONNECT_REST_PORT: 8083
+        CONNECT_REST_LISTENERS: http://0.0.0.0:8083
+        CONNECT_REST_ADVERTISED_HOST_NAME: connect
+        CONNECT_GROUP_ID: kafka-connect
+        CONNECT_CONFIG_STORAGE_TOPIC: __connect-config
+        CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+        CONNECT_OFFSET_FLUSH_INTERVAL_MS: 10000
+        CONNECT_OFFSET_STORAGE_TOPIC: __connect-offsets
+        CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+        CONNECT_STATUS_STORAGE_TOPIC: __connect-status
+        CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+        CONNECT_KEY_CONVERTER: org.apache.kafka.connect.storage.StringConverter
+        CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
+        CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8085
+        CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      networks:
+        - demo-ai-bu-net
 
   grafana:
     image:          grafana/grafana:latest
