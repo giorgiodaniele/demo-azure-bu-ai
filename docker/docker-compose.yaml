@@ -91,7 +91,7 @@ services:
     image:          confluentinc/cp-schema-registry:8.0.0
     hostname:       schema-registry
     container_name: schema-registry
-    restart: on-failure
+    restart:        on-failure
     depends_on:
       - kafka
     environment:
@@ -99,6 +99,10 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8085
       SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
+    networks:
+      - demo-ai-bu-net
+
+
 
   akhq:
     image:          tchiotludo/akhq:latest
@@ -178,6 +182,13 @@ services:
         CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
         CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8085
         CONNECT_PLUGIN_PATH: "/usr/share/java,/usr/share/confluent-hub-components"
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.connect.rule=PathPrefix(`/connect`)"
+        - "traefik.http.routers.connect.entrypoints=web"
+        - "traefik.http.middlewares.connect-strip.stripprefix.prefixes=/connect"
+        - "traefik.http.routers.connect.middlewares=connect-strip"
+        - "traefik.http.services.connect.loadbalancer.server.port=8083"
       networks:
         - demo-ai-bu-net
 
