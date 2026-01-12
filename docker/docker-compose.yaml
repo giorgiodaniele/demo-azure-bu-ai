@@ -52,11 +52,11 @@ services:
       - kafka-data:/var/lib/kafka/data
     environment:
       KAFKA_NODE_ID: 1
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT, PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS:           PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENERS:                      PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093, PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_INTER_BROKER_LISTENER_NAME:     PLAINTEXT
-      KAFKA_CONTROLLER_LISTENER_NAMES:      CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS:           'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENERS:                      'PLAINTEXT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME:     'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES:      'CONTROLLER'
       KAFKA_PROCESS_ROLES:                  broker,controller
       KAFKA_CONTROLLER_QUORUM_VOTERS:       1@kafka:29093
 
@@ -69,20 +69,22 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR:            1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
 
-      KAFKA_JMX_PORT:     9091
-      KAFKA_JMX_HOSTNAME: localhost
-      KAFKA_JMX_OPTS: >
-        -Dcom.sun.management.jmxremote=true
-        -Dcom.sun.management.jmxremote.rmi.port=9091
-        -Dcom.sun.management.jmxremote.authenticate=false
-        -Dcom.sun.management.jmxremote.ssl=false
-        -Dcom.sun.management.jmxremote.local.only=false
-        -javaagent:/usr/share/java/cp-base-new/
-        jmx_prometheus_javaagent-0.20.0.jar=1234:
-        /opt/prometheus/config.yaml
+      # KAFKA_JMX_PORT:     9091
+      # KAFKA_JMX_HOSTNAME: localhost
+      # KAFKA_JMX_OPTS: >
+      #   -Dcom.sun.management.jmxremote=true
+      #   -Dcom.sun.management.jmxremote.rmi.port=9091
+      #   -Dcom.sun.management.jmxremote.authenticate=false
+      #   -Dcom.sun.management.jmxremote.ssl=false
+      #   -Dcom.sun.management.jmxremote.local.only=false
+      #   -javaagent:/usr/share/java/cp-base-new/
+      #   jmx_prometheus_javaagent-0.20.0.jar=1234:
+      #   /opt/prometheus/config.yaml
 
       KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
       CLUSTER_ID:     MkU3OEVBNTcwNTJENDM2Qk
+    networks:
+      - demo-ai-bu-net
 
 
   schema-registry:
@@ -122,6 +124,8 @@ services:
       CONNECT_VALUE_CONVERTER: io.confluent.connect.avro.AvroConverter
       CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: http://schema-registry:8085
       CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+    networks:
+      - demo-ai-bu-net
 
   akhq:
     image:          tchiotludo/akhq:latest
